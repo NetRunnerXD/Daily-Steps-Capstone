@@ -1,1 +1,39 @@
-# Daily-Steps-Capstone
+# 🎓 Daily Steps: Student Routine & Self-Discipline Tracker
+
+A lightweight, interactive Streamlit web application designed to help students build a strong daily routine, track weekly goals, and master self-discipline through actionable tips and daily reflections.
+
+## ✨ Features
+
+* **Daily Routine Checklist:** An interactive timeline to track morning setups, academic focus sessions, and evening wind-downs.
+* **Tips for Self-Discipline:** Actionable, beginner-friendly advice including the 5-Minute Rule and Pomodoro Technique.
+* **Weekly Goals:** A dedicated space to set, visualize, and save both academic and personal objectives for the week.
+* **Daily Reflection:** An end-of-day productivity slider and journaling prompts to foster continuous self-improvement.
+
+## 🚀 Getting Started
+
+### Prerequisites
+Ensure you have Python installed on your system. You will also need the Streamlit library to run the application.
+
+```bash
+pip install streamlit
+```
+
+## Installation & Execution
+* **1. Clone this repository to your local machine:**
+```bash
+git clone [https://github.com/yourusername/daily-steps-app.git](https://github.com/yourusername/daily-steps-app.git)
+```
+* **2. Navigate to the project directory:**
+```bash
+cd daily-steps-app
+```
+* **3. Run the Streamlit application:**
+```bash
+streamlit run DAILY_STEPS_FOR_STUDENT_ROUTINE_AND_IMPROVE_SELF_DISCIPLINE.py
+```
+
+## 🛠️ Tech Stack
+* **Language: Python**
+* **Framework: Streamlit**
+
+   
