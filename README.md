@@ -21,7 +21,7 @@ pip install streamlit
 ## Installation & Execution
 * **1. Clone this repository to your local machine:**
 ```bash
-git clone [https://github.com/yourusername/daily-steps-app.git](https://github.com/yourusername/daily-steps-app.git)
+git clone [https://github.com/thechiragvaishnav-dotcom/Daily-Steps-Capstone](https://github.com/thechiragvaishnav-dotcom/Daily-Steps-Capstone)
 ```
 * **2. Navigate to the project directory:**
 ```bash
