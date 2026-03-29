@@ -25,7 +25,7 @@ git clone git clone https://github.com/thechiragvaishnav-dotcom/Daily-Steps-Caps
 ```
 * **2. Navigate to the project directory:**
 ```bash
-cd daily-steps-app
+cd Daily-Steps-Capstone
 ```
 * **3. Run the Streamlit application:**
 ```bash
