@@ -34,19 +34,25 @@ def init_sqlite_db():
 init_sqlite_db()
 
 # --- B. MongoDB Setup (Document Data: Focus Logs, Goals, Reflections) ---
+# --- B. MongoDB Setup (Document Data: Focus Logs, Goals, Reflections) ---
+MONGO_URI = st.secrets["MONGO_URI"] 
+
+# Use Streamlit's cache so it only connects to the database once!
+@st.cache_resource
+def init_mongo_connection():
+    return pymongo.MongoClient(MONGO_URI, serverSelectionTimeoutMS=2000)
+
 try:
-    # Streamlit Cloud uses st.secrets. 
-    MONGO_URI = st.secrets["MONGO_URI"] 
-    mongo_client = pymongo.MongoClient(MONGO_URI, serverSelectionTimeoutMS=2000)
+    mongo_client = init_mongo_connection()
     mongo_client.server_info() # Trigger exception if cannot connect
     mongo_db = mongo_client["daily_steps_db"]
     focus_col = mongo_db["focus_logs"]
     goals_col = mongo_db["weekly_goals"]
     reflections_col = mongo_db["reflections"]
     MONGO_AVAILABLE = True
-except (pymongo.errors.ServerSelectionTimeoutError, KeyError):
+except pymongo.errors.ServerSelectionTimeoutError:
     MONGO_AVAILABLE = False
-    st.sidebar.warning("⚠️ Could not connect to MongoDB (or Secret missing). Goals, Reflections, and Focus Time will not be saved permanently.")
+    st.sidebar.warning("⚠️ Could not connect to MongoDB. Goals, Reflections, and Focus Time will not be saved permanently.")
 
 
 # ==========================================
