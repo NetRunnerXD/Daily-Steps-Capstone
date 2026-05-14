@@ -3,8 +3,12 @@ import time
 import uuid
 import sqlite3
 import hashlib
+import os
 from datetime import datetime, timedelta, date
 import pymongo
+
+# Use the exact hardcoded absolute path
+DB_PATH = r"C:\Users\Lenovo\Downloads\capstoneProject\daily_steps.db"
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(page_title="DAILY STEPS - FOR STUDENT ROUTINE", page_icon="ðŸ“š", layout="wide")
@@ -16,7 +20,7 @@ st.set_page_config(page_title="DAILY STEPS - FOR STUDENT ROUTINE", page_icon="ðŸ
 
 # --- A. SQLite Setup (Relational Data: Users & Tasks) ---
 def init_sqlite_db():
-    conn = sqlite3.connect('daily_steps.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute('''
         CREATE TABLE IF NOT EXISTS users (
@@ -33,7 +37,6 @@ def init_sqlite_db():
 
 init_sqlite_db()
 
-# --- B. MongoDB Setup (Document Data: Focus Logs, Goals, Reflections) ---
 # --- B. MongoDB Setup (Document Data: Focus Logs, Goals, Reflections) ---
 MONGO_URI = st.secrets["MONGO_URI"] 
 
@@ -64,7 +67,7 @@ def make_hashes(password): return hashlib.sha256(str.encode(password)).hexdigest
 def check_hashes(password, hashed_text): return make_hashes(password) == hashed_text
 
 def add_user(username, password, email):
-    conn = sqlite3.connect('daily_steps.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute('INSERT INTO users(username, password, email, notifications_enabled) VALUES (?,?,?,?)', 
               (username, make_hashes(password), email, 0))
@@ -72,7 +75,7 @@ def add_user(username, password, email):
     conn.close()
 
 def login_user(username, password):
-    conn = sqlite3.connect('daily_steps.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute('SELECT password FROM users WHERE username = ?', (username,))
     data = c.fetchone()
@@ -82,14 +85,14 @@ def login_user(username, password):
 
 # --- SQLite Task Operations ---
 def add_task(task_id, username, task, time_str, priority, completed=0):
-    conn = sqlite3.connect('daily_steps.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute('INSERT INTO tasks VALUES (?,?,?,?,?,?)', (task_id, username, task, time_str, priority, completed))
     conn.commit()
     conn.close()
 
 def get_tasks(username):
-    conn = sqlite3.connect('daily_steps.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute('SELECT id, task, time, priority, completed FROM tasks WHERE username = ?', (username,))
     data = c.fetchall()
@@ -97,14 +100,14 @@ def get_tasks(username):
     return [{"id": row[0], "task": row[1], "time": row[2], "priority": row[3], "completed": bool(row[4])} for row in data]
 
 def update_task_status(task_id, completed):
-    conn = sqlite3.connect('daily_steps.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute('UPDATE tasks SET completed = ? WHERE id = ?', (int(completed), task_id))
     conn.commit()
     conn.close()
 
 def delete_task(task_id):
-    conn = sqlite3.connect('daily_steps.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute('DELETE FROM tasks WHERE id = ?', (task_id,))
     conn.commit()
@@ -168,7 +171,7 @@ if not st.session_state.logged_in:
         new_email = st.text_input("Email Address")
         new_password = st.text_input("Password", type='password')
         if st.button("Sign Up"):
-            conn = sqlite3.connect('daily_steps.db')
+            conn = sqlite3.connect(DB_PATH)
             c = conn.cursor()
             c.execute('SELECT * FROM users WHERE username = ?', (new_user,))
             if c.fetchone():
@@ -477,7 +480,7 @@ else:
         st.write("Manage your email alerts and push notifications for your daily routines.")
         
         # Get user data from SQLite
-        conn = sqlite3.connect('daily_steps.db')
+        conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
         c.execute('SELECT email, notifications_enabled FROM users WHERE username = ?', (st.session_state.username,))
         user_data = c.fetchone()
