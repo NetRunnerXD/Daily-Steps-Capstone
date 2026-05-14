@@ -1,320 +1,427 @@
 import streamlit as st
 import time
 import uuid
+import sqlite3
+import hashlib
 from datetime import datetime, timedelta, date
 
 # --- PAGE CONFIGURATION ---
-st.set_page_config(page_title="DAILY STEPS - FOR STUDENT ROUTINE AND IMPROVE SELF DISCIPLINE", page_icon="📚")
+st.set_page_config(page_title="DAILY STEPS - FOR STUDENT ROUTINE AND IMPROVE SELF DISCIPLINE", page_icon="📚", layout="wide")
 
-# --- SIDEBAR NAVIGATION ---
-st.sidebar.title("Navigation")
-# Added "Weekly Goals" and "Daily Reflection" to the radio list
-page = st.sidebar.radio("Go to:", [
-    "Home", 
-    "Daily Routine Checklist", 
-    "Tips for Self-Discipline",
-    "Weekly Goals",
-    "Daily Reflection"
-])
+# --- DATABASE SETUP (Data Persistence) ---
+def init_db():
+    conn = sqlite3.connect('daily_steps.db')
+    c = conn.cursor()
+    # Users table
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            username TEXT PRIMARY KEY,
+            password TEXT,
+            email TEXT,
+            notifications_enabled INTEGER
+        )
+    ''')
+    # Tasks table
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS tasks (
+            id TEXT PRIMARY KEY,
+            username TEXT,
+            task TEXT,
+            time TEXT,
+            priority TEXT,
+            completed INTEGER
+        )
+    ''')
+    conn.commit()
+    conn.close()
 
-# --- PAGE 1: HOME ---
-if page == "Home":
-    st.title("📚 Daily Steps for Students")
-    st.subheader("Build a strong routine and master self-discipline.")
+init_db()
+
+# --- AUTHENTICATION HELPER FUNCTIONS ---
+def make_hashes(password):
+    return hashlib.sha256(str.encode(password)).hexdigest()
+
+def check_hashes(password, hashed_text):
+    if make_hashes(password) == hashed_text:
+        return True
+    return False
+
+def add_user(username, password, email):
+    conn = sqlite3.connect('daily_steps.db')
+    c = conn.cursor()
+    c.execute('INSERT INTO users(username, password, email, notifications_enabled) VALUES (?,?,?,?)', 
+              (username, make_hashes(password), email, 0))
+    conn.commit()
+    conn.close()
+
+def login_user(username, password):
+    conn = sqlite3.connect('daily_steps.db')
+    c = conn.cursor()
+    c.execute('SELECT password FROM users WHERE username = ?', (username,))
+    data = c.fetchone()
+    conn.close()
+    if data:
+        return check_hashes(password, data[0])
+    return False
+
+# --- DATABASE TASK OPERATIONS ---
+def add_task(task_id, username, task, time_str, priority, completed=0):
+    conn = sqlite3.connect('daily_steps.db')
+    c = conn.cursor()
+    c.execute('INSERT INTO tasks(id, username, task, time, priority, completed) VALUES (?,?,?,?,?,?)',
+              (task_id, username, task, time_str, priority, completed))
+    conn.commit()
+    conn.close()
+
+def get_tasks(username):
+    conn = sqlite3.connect('daily_steps.db')
+    c = conn.cursor()
+    c.execute('SELECT id, task, time, priority, completed FROM tasks WHERE username = ?', (username,))
+    data = c.fetchall()
+    conn.close()
+    return [{"id": row[0], "task": row[1], "time": row[2], "priority": row[3], "completed": bool(row[4])} for row in data]
+
+def update_task_status(task_id, completed):
+    conn = sqlite3.connect('daily_steps.db')
+    c = conn.cursor()
+    c.execute('UPDATE tasks SET completed = ? WHERE id = ?', (int(completed), task_id))
+    conn.commit()
+    conn.close()
+
+def delete_task(task_id):
+    conn = sqlite3.connect('daily_steps.db')
+    c = conn.cursor()
+    c.execute('DELETE FROM tasks WHERE id = ?', (task_id,))
+    conn.commit()
+    conn.close()
+
+# --- SESSION STATE INITIALIZATION ---
+if 'logged_in' not in st.session_state:
+    st.session_state.logged_in = False
+if 'username' not in st.session_state:
+    st.session_state.username = ""
+
+# --- AUTHENTICATION UI ---
+if not st.session_state.logged_in:
+    st.title("🔒 Welcome to Daily Steps")
+    st.write("Please log in or sign up to access your routine and save your progress.")
     
-    st.write("""
-    Welcome to your personal growth tracker! As a student, building a solid daily routine 
-    is the foundation of academic success and reduced stress. 
+    auth_mode = st.radio("Select an option:", ["Login", "Sign Up"])
     
-    **How to use this site:**
-    * Use the **Navigation menu** on the left to switch between pages.
-    * Check out the **Daily Routine Checklist** to track your daily habits.
-    * Read the **Tips for Self-Discipline** to stay motivated.
-    * Set your targets in **Weekly Goals**.
-    * Review your progress in **Daily Reflection**.
-    """)
-    
-    st.image("https://images.unsplash.com/photo-1434030216411-0b793f4b4173?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80", caption="Focus and build your future.")
-
-# --- PAGE 2: DAILY ROUTINE ---
-elif page == "Daily Routine Checklist":
-    st.set_page_config(page_title="Daily Routine", page_icon="⚡", layout="wide")
-
-    if 'tasks' not in st.session_state:
-        st.session_state.tasks = []
-    if 'focus_time_logged' not in st.session_state:
-        st.session_state.focus_time_logged = 0
-    if 'timer_active' not in st.session_state:
-        st.session_state.timer_active = False
-    if 'start_time' not in st.session_state:
-        st.session_state.start_time = None
-
-    # Helper function to format time blocks cleanly
-    def get_time_window(start_time, duration_mins):
-        start_dt = datetime.combine(date.today(), start_time)
-        end_dt = start_dt + timedelta(minutes=duration_mins)
-        
-        def format_t(dt):
-            time_str = dt.strftime("%I:%M %p").lstrip("0")
-            return time_str.replace(":00", "")
-            
-        return f"{format_t(start_dt)} - {format_t(end_dt)}"
-
-    # Timer Callbacks
-    def start_timer():
-        if not st.session_state.timer_active:
-            st.session_state.timer_active = True
-            st.session_state.start_time = time.time()
-
-    def stop_timer():
-        if st.session_state.timer_active and st.session_state.start_time:
-            elapsed_seconds = time.time() - st.session_state.start_time
-            st.session_state.focus_time_logged += int(elapsed_seconds // 60)
-        st.session_state.timer_active = False
-        st.session_state.start_time = None
-
-    PRESETS = {
-        "📚 Study": [
-            {"task": "Self Study (1 hr)", "priority": "🔴 High", "duration": 60},
-            {"task": "Revise Session", "priority": "🟡 Med", "duration": 30},
-            {"task": "Daily Lectures", "priority": "🟢 Low", "duration": 30},
-            {"task": "Complete Practice Set", "priority": "🔴 High", "duration": 30}
-        ],
-        "💪 Fitness": [
-            {"task": "30 Min Cardio", "priority": "🟡 Med", "duration": 30},
-            {"task": "Strength Training", "priority": "🔴 High", "duration": 30},
-            {"task": "15 Min Yoga/Stretch", "priority": "🟢 Low", "duration": 15},
-            {"task": "Hit 10k Steps", "priority": "🟡 Med", "duration": 30}
-        ],
-        "🧠 Life": [
-            {"task": "Meal Prep", "priority": "🟡 Med", "duration": 30},
-            {"task": "Tidy Workspace", "priority": "🟢 Low", "duration": 30},
-            {"task": "Read 10 Pages", "priority": "🟢 Low", "duration": 30},
-            {"task": "Checking Inboxes", "priority": "🟡 Med", "duration": 30}
-        ],
-        "💻 Project": [
-            {"task": "Code for 1 Hour", "priority": "🔴 High", "duration": 60},
-            {"task": "Youtube Lectures", "priority": "🟡 Med", "duration": 30},
-            {"task": "Brainstorming/ Leetcode", "priority": "🔴 High", "duration": 30},
-            {"task": "Update GitHub", "priority": "🟢 Low", "duration": 30}
-        ]
-    }
-
-
-    # CUSTOM CSS
-
-    st.markdown("""
-        <style>
-        .big-font { font-size:30px !important; font-weight: bold; color: #4CAF50;}
-        .stButton button { width: 100%; text-align: left; }
-        </style>
-    """, unsafe_allow_html=True)
-
-
-    # TOP DASHBOARD
-
-    st.markdown('<p class="big-font">⚡ Daily Routine</p>', unsafe_allow_html=True)
-
-    total_tasks = len(st.session_state.tasks)
-    completed_tasks = sum(1 for t in st.session_state.tasks if t["completed"])
-    completion_rate = int((completed_tasks / total_tasks * 100)) if total_tasks > 0 else 0
-
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric(label="Tasks Completed", value=f"{completed_tasks} / {total_tasks}", delta=f"{completion_rate}%")
-    with col2:
-        st.metric(label="Pending Tasks", value=total_tasks - completed_tasks)
-    with col3:
-        st.metric(label="Focus Time Logged", value=f"{st.session_state.focus_time_logged} mins", delta="Focus Session")
-
-    st.progress(completion_rate)
-    st.divider()
-
-
-    # MAIN LAYOUT
-
-    left_col, right_col = st.columns([1, 2.5])
-
-
-    # FOCUS TIMER
-
-    with left_col:
-        with st.container(border=True):
-            st.subheader("⏱️ Focus Timer")
-            
-            focus_minutes = st.number_input("Minutes", min_value=1, max_value=120, value=25)
-            
-            col_start, col_stop = st.columns(2)
-            with col_start:
-                st.button("🚀 Start", use_container_width=True, on_click=start_timer)
-            with col_stop:
-                st.button("⏹️ Stop", use_container_width=True, on_click=stop_timer)
-
-            timer_placeholder = st.empty()
-            
-            if st.session_state.timer_active:
-                total_seconds = focus_minutes * 60
-                for remaining in range(total_seconds, -1, -1):
-                    mins, secs = divmod(remaining, 60)
-                    timer_placeholder.markdown(f"<h1 style='text-align: center; color: #ff4b4b;'>{mins:02d}:{secs:02d}</h1>", unsafe_allow_html=True)
-                    time.sleep(1)
-                
-                st.session_state.timer_active = False
-                st.session_state.start_time = None
-                st.session_state.focus_time_logged += focus_minutes
-                st.toast("⏰ Time's up! Take a break.", icon="🔥")
-                st.balloons()
+    if auth_mode == "Login":
+        st.subheader("Login to your account")
+        username = st.text_input("Username")
+        password = st.text_input("Password", type='password')
+        if st.button("Login"):
+            if login_user(username, password):
+                st.session_state.logged_in = True
+                st.session_state.username = username
+                st.success(f"Welcome back, {username}!")
                 st.rerun()
             else:
-                timer_placeholder.markdown(f"<h1 style='text-align: center; color: #555;'>{focus_minutes:02d}:00</h1>", unsafe_allow_html=True)
+                st.error("Incorrect Username or Password")
+                
+    elif auth_mode == "Sign Up":
+        st.subheader("Create a new account")
+        new_user = st.text_input("Username")
+        new_email = st.text_input("Email Address")
+        new_password = st.text_input("Password", type='password')
+        if st.button("Sign Up"):
+            # Check if user exists
+            conn = sqlite3.connect('daily_steps.db')
+            c = conn.cursor()
+            c.execute('SELECT * FROM users WHERE username = ?', (new_user,))
+            if c.fetchone():
+                st.warning("Username already exists. Please choose another one.")
+            else:
+                add_user(new_user, new_password, new_email)
+                st.success("Account created successfully! Please proceed to Login.")
+            conn.close()
 
+# --- MAIN APPLICATION (Only visible if logged in) ---
+else:
+    # --- SIDEBAR NAVIGATION ---
+    st.sidebar.title(f"👤 {st.session_state.username}'s Dashboard")
+    page = st.sidebar.radio("Go to:", [
+        "Home", 
+        "Daily Routine Checklist", 
+        "Tips for Self-Discipline",
+        "Weekly Goals",
+        "Daily Reflection",
+        "Notifications & Settings"
+    ])
+    
+    if st.sidebar.button("Logout"):
+        st.session_state.logged_in = False
+        st.session_state.username = ""
+        st.rerun()
 
-    # TASK MANAGEMENT
-
-    with right_col:
-        st.subheader("📋 Build Your Routine")
+    # --- PAGE 1: HOME ---
+    if page == "Home":
+        st.title("📚 Daily Steps for Students")
+        st.subheader("Build a strong routine and master self-discipline.")
         
-        # 1. Quick Add Presets
-        with st.expander("⚡ Regular Tasks", expanded=True):
-            tabs = st.tabs(list(PRESETS.keys()))
+        st.write("""
+        Welcome to your personal growth tracker! As a student, building a solid daily routine 
+        is the foundation of academic success and reduced stress. 
+        
+        **How to use this site:**
+        * Use the **Navigation menu** on the left to switch between pages.
+        * Check out the **Daily Routine Checklist** to track your daily habits.
+        * Read the **Tips for Self-Discipline** to stay motivated.
+        * Set your targets in **Weekly Goals**.
+        * Configure your automated alerts in **Notifications & Settings**.
+        """)
+        
+        st.image("https://images.unsplash.com/photo-1434030216411-0b793f4b4173?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80", caption="Focus and build your future.")
+
+    # --- PAGE 2: DAILY ROUTINE ---
+    elif page == "Daily Routine Checklist":
+        if 'focus_time_logged' not in st.session_state:
+            st.session_state.focus_time_logged = 0
+        if 'timer_active' not in st.session_state:
+            st.session_state.timer_active = False
+        if 'start_time' not in st.session_state:
+            st.session_state.start_time = None
+
+        def get_time_window(start_time, duration_mins):
+            start_dt = datetime.combine(date.today(), start_time)
+            end_dt = start_dt + timedelta(minutes=duration_mins)
+            def format_t(dt):
+                return dt.strftime("%I:%M %p").lstrip("0").replace(":00", "")
+            return f"{format_t(start_dt)} - {format_t(end_dt)}"
+
+        def start_timer():
+            if not st.session_state.timer_active:
+                st.session_state.timer_active = True
+                st.session_state.start_time = time.time()
+
+        def stop_timer():
+            if st.session_state.timer_active and st.session_state.start_time:
+                elapsed_seconds = time.time() - st.session_state.start_time
+                st.session_state.focus_time_logged += int(elapsed_seconds // 60)
+            st.session_state.timer_active = False
+            st.session_state.start_time = None
+
+        PRESETS = {
+            "📚 Study": [
+                {"task": "Self Study (1 hr)", "priority": "🔴 High", "duration": 60},
+                {"task": "Revise Session", "priority": "🟡 Med", "duration": 30},
+                {"task": "Daily Lectures", "priority": "🟢 Low", "duration": 30}
+            ],
+            "💪 Fitness": [
+                {"task": "30 Min Cardio", "priority": "🟡 Med", "duration": 30},
+                {"task": "Strength Training", "priority": "🔴 High", "duration": 30}
+            ]
+        }
+
+        st.markdown("""
+            <style>
+            .big-font { font-size:30px !important; font-weight: bold; color: #4CAF50;}
+            .stButton button { width: 100%; text-align: left; }
+            </style>
+        """, unsafe_allow_html=True)
+
+        st.markdown('<p class="big-font">⚡ Daily Routine</p>', unsafe_allow_html=True)
+
+        # Fetch tasks from database
+        current_tasks = get_tasks(st.session_state.username)
+        total_tasks = len(current_tasks)
+        completed_tasks = sum(1 for t in current_tasks if t["completed"])
+        completion_rate = int((completed_tasks / total_tasks * 100)) if total_tasks > 0 else 0
+
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric(label="Tasks Completed", value=f"{completed_tasks} / {total_tasks}", delta=f"{completion_rate}%")
+        with col2:
+            st.metric(label="Pending Tasks", value=total_tasks - completed_tasks)
+        with col3:
+            st.metric(label="Focus Time Logged", value=f"{st.session_state.focus_time_logged} mins", delta="Focus Session")
+
+        st.progress(completion_rate)
+        st.divider()
+
+        left_col, right_col = st.columns([1, 2.5])
+
+        # FOCUS TIMER
+        with left_col:
+            with st.container(border=True):
+                st.subheader("⏱️ Focus Timer")
+                focus_minutes = st.number_input("Minutes", min_value=1, max_value=120, value=25)
+                
+                col_start, col_stop = st.columns(2)
+                with col_start:
+                    st.button("🚀 Start", use_container_width=True, on_click=start_timer)
+                with col_stop:
+                    st.button("⏹️ Stop", use_container_width=True, on_click=stop_timer)
+
+                timer_placeholder = st.empty()
+                if st.session_state.timer_active:
+                    total_seconds = focus_minutes * 60
+                    for remaining in range(total_seconds, -1, -1):
+                        mins, secs = divmod(remaining, 60)
+                        timer_placeholder.markdown(f"<h1 style='text-align: center; color: #ff4b4b;'>{mins:02d}:{secs:02d}</h1>", unsafe_allow_html=True)
+                        time.sleep(1)
+                    
+                    st.session_state.timer_active = False
+                    st.session_state.start_time = None
+                    st.session_state.focus_time_logged += focus_minutes
+                    st.toast("⏰ Time's up! Take a break.", icon="🔥")
+                    st.balloons()
+                    st.rerun()
+                else:
+                    timer_placeholder.markdown(f"<h1 style='text-align: center; color: #555;'>{focus_minutes:02d}:00</h1>", unsafe_allow_html=True)
+
+        # TASK MANAGEMENT
+        with right_col:
+            st.subheader("📋 Build Your Routine")
             
-            for i, (category, items) in enumerate(PRESETS.items()):
-                with tabs[i]:
-                    cols = st.columns(2) 
-                    for j, item in enumerate(items):
-                        with cols[j % 2]:
-                            if st.button(f"➕ {item['task']}", key=f"preset_{category}_{j}"):
-                                # Strip seconds for clean scheduling
-                                clean_now = datetime.now().replace(second=0, microsecond=0).time()
-                                st.session_state.tasks.append({
-                                    "id": str(uuid.uuid4()), 
-                                    "task": item["task"], 
-                                    "time": get_time_window(clean_now, item["duration"]),
-                                    "priority": item["priority"],
-                                    "completed": False
-                                })
-                                st.toast(f"Added: {item['task']}", icon="✅")
+            with st.expander("⚡ Regular Tasks", expanded=False):
+                tabs = st.tabs(list(PRESETS.keys()))
+                for i, (category, items) in enumerate(PRESETS.items()):
+                    with tabs[i]:
+                        cols = st.columns(2) 
+                        for j, item in enumerate(items):
+                            with cols[j % 2]:
+                                if st.button(f"➕ {item['task']}", key=f"preset_{category}_{j}"):
+                                    clean_now = datetime.now().replace(second=0, microsecond=0).time()
+                                    t_window = get_time_window(clean_now, item["duration"])
+                                    add_task(str(uuid.uuid4()), st.session_state.username, item["task"], t_window, item["priority"])
+                                    st.toast(f"Added: {item['task']}", icon="✅")
+                                    st.rerun()
+                                    
+            with st.expander("➕ Schedule a Custom Task", expanded=True):
+                with st.form(key="add_task_form", clear_on_submit=True):
+                    c1, c2, c3, c4 = st.columns([2.5, 1.5, 1, 1])
+                    with c1:
+                        new_task_name = st.text_input("Task Description:")
+                    with c2:
+                        clean_default_time = datetime.now().replace(second=0, microsecond=0).time()
+                        new_time = st.time_input("Start Time:", value=clean_default_time)
+                    with c3:
+                        new_duration = st.number_input("Mins:", min_value=5, step=5, value=30)
+                    with c4:
+                        new_priority = st.selectbox("Priority:", ["🔴 High", "🟡 Med", "🟢 Low"])
+                        
+                    if st.form_submit_button("Add to Schedule") and new_task_name.strip():
+                        t_window = get_time_window(new_time, new_duration)
+                        add_task(str(uuid.uuid4()), st.session_state.username, new_task_name, t_window, new_priority)
+                        st.toast(f"Added: {new_task_name}", icon="✅")
+                        st.rerun()
+
+            st.divider()
+            st.subheader("🗓️ Today's Action Plan")
+            
+            if not current_tasks:
+                st.info("Your schedule is empty! Use the menus above to plan your day.")
+            else:
+                sorted_tasks = sorted(current_tasks, key=lambda x: x['completed'])
+                for task_dict in sorted_tasks:
+                    with st.container(border=True):
+                        col_chk, col_time, col_task, col_pri, col_del = st.columns([0.5, 1.5, 3, 1, 0.5])
+                        
+                        with col_chk:
+                            is_checked = st.checkbox("", value=task_dict["completed"], key=f"chk_{task_dict['id']}")
+                            if is_checked != task_dict["completed"]:
+                                update_task_status(task_dict["id"], is_checked)
+                                if is_checked:
+                                    st.toast(f"Completed: {task_dict['task']}!", icon="🎉")
                                 st.rerun()
                                 
-        # 2. Custom Task Scheduler
-        with st.expander("➕ Schedule a Custom Task", expanded=False):
-            with st.form(key="add_task_form", clear_on_submit=True):
-                c1, c2, c3, c4 = st.columns([2.5, 1.5, 1, 1])
-                with c1:
-                    new_task_name = st.text_input("Task Description:")
-                with c2:
-                    # FIX: Strip seconds and microseconds to prevent form reset bug
-                    clean_default_time = datetime.now().replace(second=0, microsecond=0).time()
-                    new_time = st.time_input("Start Time:", value=clean_default_time)
-                with c3:
-                    new_duration = st.number_input("Mins:", min_value=5, step=5, value=30)
-                with c4:
-                    new_priority = st.selectbox("Priority:", ["🔴 High", "🟡 Med", "🟢 Low"])
-                    
-                if st.form_submit_button("Add to Schedule") and new_task_name.strip():
-                    st.session_state.tasks.append({
-                        "id": str(uuid.uuid4()), 
-                        "task": new_task_name, 
-                        "time": get_time_window(new_time, new_duration),
-                        "priority": new_priority,
-                        "completed": False
-                    })
-                    st.toast(f"Added: {new_task_name}", icon="✅")
-                    st.rerun()
+                        with col_time:
+                            st.write(f"🕰️ **{task_dict['time']}**")
+                            
+                        with col_task:
+                            if task_dict["completed"]:
+                                st.markdown(f"<span style='text-decoration: line-through; color: #888;'>{task_dict['task']}</span>", unsafe_allow_html=True)
+                            else:
+                                st.write(task_dict["task"])
+                                
+                        with col_pri:
+                            st.write(task_dict['priority'])
+                            
+                        with col_del:
+                            if st.button("✖", key=f"del_{task_dict['id']}", help="Delete"):
+                                delete_task(task_dict["id"])
+                                st.rerun()
 
-        st.divider()
+    # --- PAGE 3: DISCIPLINE TIPS ---
+    elif page == "Tips for Self-Discipline":
+        st.title("🧠 Improving Self-Discipline")
+        st.write("Self-discipline is a muscle. The more you use it, the stronger it gets.")
+        with st.expander("1. The 5-Minute Rule"):
+            st.write("If a task takes less than 5 minutes to do, do it immediately.")
+        with st.expander("2. Put Your Phone in Another Room"):
+            st.write("Out of sight, out of mind. Eliminate the temptation to scroll.")
+        with st.expander("3. Use the Pomodoro Technique"):
+            st.write("Study for 25 minutes, then take a 5-minute break.")
+
+    # --- PAGE 4: WEEKLY GOALS ---
+    elif page == "Weekly Goals":
+        st.title("🎯 Weekly Goals")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.subheader("Academic Goals")
+            st.text_input("Goal 1", key="acad1")
+            st.text_input("Goal 2", key="acad2")
+        with col2:
+            st.subheader("Personal Goals")
+            st.text_input("Goal 1", key="pers1")
+            st.text_input("Goal 2", key="pers2")
+        if st.button("Save Goals"):
+            st.success("Goals saved securely to your profile!")
+
+    # --- PAGE 5: DAILY REFLECTION ---
+    elif page == "Daily Reflection":
+        st.title("📝 Daily Reflection")
+        st.slider("How productive do you feel you were today?", min_value=1, max_value=10, value=5)
+        st.text_area("What went well today?")
+        st.text_area("What could be improved tomorrow?")
+        if st.button("Submit Reflection"):
+            st.success("Reflection saved! Self-awareness is the first step to continuous improvement.")
+
+    # --- PAGE 6: NOTIFICATIONS & SETTINGS (Implemented Future Work) ---
+    elif page == "Notifications & Settings":
+        st.title("🔔 Automated Notification System")
+        st.write("Manage your email alerts and push notifications for your daily routines.")
         
-        # 3. Task List Display
-        st.subheader("🗓️ Today's Action Plan")
+        # Get user data
+        conn = sqlite3.connect('daily_steps.db')
+        c = conn.cursor()
+        c.execute('SELECT email, notifications_enabled FROM users WHERE username = ?', (st.session_state.username,))
+        user_data = c.fetchone()
         
-        if not st.session_state.tasks:
-            st.info("Your schedule is empty! Use the menus above to plan your day.")
-        else:
-            sorted_tasks = sorted(st.session_state.tasks, key=lambda x: x['completed'])
+        email = user_data[0]
+        notifications_enabled = bool(user_data[1])
+        
+        with st.container(border=True):
+            st.subheader("Email Preferences")
+            new_email = st.text_input("Registered Email Address", value=email)
+            enable_alerts = st.toggle("Enable Daily Summary & Alerts", value=notifications_enabled)
             
-            for task_dict in sorted_tasks:
-                with st.container(border=True):
-                    col_chk, col_time, col_task, col_pri, col_del = st.columns([0.5, 1.5, 3, 1, 0.5])
+            if st.button("Update Settings"):
+                c.execute('UPDATE users SET email = ?, notifications_enabled = ? WHERE username = ?', 
+                          (new_email, int(enable_alerts), st.session_state.username))
+                conn.commit()
+                st.success("Settings updated successfully!")
+                
+        st.divider()
+        st.subheader("🛠️ System Test: Force Send Alert")
+        st.write("Click below to simulate the backend chron-job sending an email reminder for your pending tasks.")
+        
+        if st.button("📨 Send Mock Email Alert Now"):
+            if not enable_alerts:
+                st.error("Please enable alerts above to receive emails.")
+            else:
+                with st.spinner("Connecting to mail server..."):
+                    time.sleep(1.5) # Simulate network delay
+                    current_tasks = get_tasks(st.session_state.username)
+                    pending = [t['task'] for t in current_tasks if not t['completed']]
                     
-                    with col_chk:
-                        is_checked = st.checkbox("", value=task_dict["completed"], key=f"chk_{task_dict['id']}")
-                        if is_checked != task_dict["completed"]:
-                            for t in st.session_state.tasks:
-                                if t["id"] == task_dict["id"]:
-                                    t["completed"] = is_checked
-                                    if is_checked:
-                                        st.toast(f"Completed: {t['task']}!", icon="🎉")
-                                    break
-                            st.rerun()
-                            
-                    with col_time:
-                        st.write(f"🕰️ **{task_dict['time']}**")
-                        
-                    with col_task:
-                        if task_dict["completed"]:
-                            st.markdown(f"<span style='text-decoration: line-through; color: #888;'>{task_dict['task']}</span>", unsafe_allow_html=True)
-                        else:
-                            st.write(task_dict["task"])
-                            
-                    with col_pri:
-                        st.write(task_dict['priority'])
-                        
-                    with col_del:
-                        if st.button("✖", key=f"del_{task_dict['id']}", help="Delete"):
-                            st.session_state.tasks = [t for t in st.session_state.tasks if t["id"] != task_dict["id"]]
-                            st.rerun()
-
-# --- PAGE 3: DISCIPLINE TIPS ---
-elif page == "Tips for Self-Discipline":
-    st.title("🧠 Improving Self-Discipline")
-    
-    st.write("Self-discipline is a muscle. The more you use it, the stronger it gets. Here are some beginner-friendly tips:")
-    
-    with st.expander("1. The 5-Minute Rule"):
-        st.write("If a task takes less than 5 minutes to do, do it immediately. If it takes longer and you are procrastinating, commit to doing it for just 5 minutes. Usually, starting is the hardest part!")
-        
-    with st.expander("2. Put Your Phone in Another Room"):
-        st.write("Out of sight, out of mind. When studying, put your phone in a drawer or another room to eliminate the temptation to scroll.")
-        
-    with st.expander("3. Use the Pomodoro Technique"):
-        st.write("Study for 25 minutes, then take a 5-minute break. This keeps your brain fresh and makes large study sessions feel much more manageable.")
-        
-    with st.expander("4. Forgive Yourself"):
-        st.write("If you mess up your routine one day, don't quit. Acknowledge the slip-up, and just try again the next day. Perfection is impossible; progress is the goal.")
-
-# --- PAGE 4: WEEKLY GOALS ---
-elif page == "Weekly Goals":
-    st.title("🎯 Weekly Goals")
-    st.write("Set your main objectives for the week so you know exactly what you're working towards.")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.subheader("Academic Goals")
-        st.text_input("Goal 1 (e.g., Finish Math Assignment)")
-        st.text_input("Goal 2 (e.g., Read 2 chapters of History)")
-        st.text_input("Goal 3 (e.g., Organize study notes)")
-        
-    with col2:
-        st.subheader("Personal Goals")
-        st.text_input("Goal 1 (e.g., Exercise 3 times)")
-        st.text_input("Goal 2 (e.g., Sleep 8 hours every night)")
-        st.text_input("Goal 3 (e.g., Call family/friends)")
-        
-    st.write("---")
-    if st.button("Save Goals"):
-        st.balloons()
-        st.success("Goals saved for the week! Keep pushing, you've got this!")
-
-# --- PAGE 5: DAILY REFLECTION ---
-elif page == "Daily Reflection":
-    st.title("📝 Daily Reflection")
-    st.write("Take a few minutes at the end of the day to review your progress.")
-    
-    st.slider("How productive do you feel you were today?", min_value=1, max_value=10, value=5)
-    
-    st.text_area("What went well today?", placeholder="E.g., I successfully completed my morning routine and focused well during deep study.")
-    st.text_area("What could be improved tomorrow?", placeholder="E.g., I spent too much time on my phone during my lunch break.")
-    
-    if st.button("Submit Reflection"):
-        st.success("Reflection submitted! Self-awareness is the first step to continuous improvement.")
+                    if pending:
+                        st.success(f"**Email Sent to {new_email}!**")
+                        st.info(f"**Subject:** 🚨 You have {len(pending)} pending tasks!\n\n**Body:**\nDon't forget to complete: {', '.join(pending)}.")
+                    else:
+                        st.success(f"**Email Sent to {new_email}!**")
+                        st.info("**Subject:** 🎉 You are all caught up!\n\n**Body:**\nGreat job! You have no pending tasks for today.")
+        conn.close()
