@@ -1,42 +1,57 @@
 import streamlit as st
 import time
 import uuid
+import sqlite3
 import hashlib
 from datetime import datetime, timedelta, date
 import pymongo
+from streamlit_autorefresh import st_autorefresh
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(page_title="DAILY STEPS - FOR STUDENT ROUTINE", page_icon="📚", layout="wide")
 
-# ==========================================
-# 1. DATABASE SETUP (100% Cloud MongoDB)
-# ==========================================
-MONGO_URI = st.secrets["MONGO_URI"] 
 
-# Use Streamlit's cache so it only connects to the database once
-@st.cache_resource
-def init_mongo_connection():
-    return pymongo.MongoClient(MONGO_URI, serverSelectionTimeoutMS=2000)
+# ==========================================
+# 1. DATABASE SETUP (Polyglot Persistence)
+# ==========================================
 
+# --- A. SQLite Setup (Relational Data: Users & Tasks) ---
+def init_sqlite_db():
+    conn = sqlite3.connect('daily_steps.db')
+    c = conn.cursor()
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            username TEXT PRIMARY KEY, password TEXT, email TEXT, notifications_enabled INTEGER
+        )
+    ''')
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS tasks (
+            id TEXT PRIMARY KEY, username TEXT, task TEXT, time TEXT, priority TEXT, completed INTEGER
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+init_sqlite_db()
+
+# --- B. MongoDB Setup (Document Data: Focus Logs, Goals, Reflections) ---
 try:
-    mongo_client = init_mongo_connection()
+    # Streamlit Cloud uses st.secrets. 
+    MONGO_URI = st.secrets["MONGO_URI"] 
+    mongo_client = pymongo.MongoClient(MONGO_URI, serverSelectionTimeoutMS=2000)
     mongo_client.server_info() # Trigger exception if cannot connect
     mongo_db = mongo_client["daily_steps_db"]
-    
-    # All Collections
-    users_col = mongo_db["users"]
-    tasks_col = mongo_db["tasks"]
     focus_col = mongo_db["focus_logs"]
     goals_col = mongo_db["weekly_goals"]
     reflections_col = mongo_db["reflections"]
     MONGO_AVAILABLE = True
-except pymongo.errors.ServerSelectionTimeoutError:
+except (pymongo.errors.ServerSelectionTimeoutError, KeyError):
     MONGO_AVAILABLE = False
-    st.sidebar.error("⚠️ CRITICAL: Could not connect to MongoDB Atlas. Check your internet or secrets.toml.")
+    st.sidebar.warning("⚠️ Could not connect to MongoDB (or Secret missing). Goals, Reflections, and Focus Time will not be saved permanently.")
 
 
 # ==========================================
-# 2. HELPER FUNCTIONS (Now Fully MongoDB)
+# 2. HELPER FUNCTIONS
 # ==========================================
 
 # --- Authentication Helpers ---
@@ -44,42 +59,61 @@ def make_hashes(password): return hashlib.sha256(str.encode(password)).hexdigest
 def check_hashes(password, hashed_text): return make_hashes(password) == hashed_text
 
 def add_user(username, password, email):
-    if not MONGO_AVAILABLE: return
-    users_col.insert_one({
-        "username": username, 
-        "password": make_hashes(password), 
-        "email": email, 
-        "notifications_enabled": False
-    })
+    conn = sqlite3.connect('daily_steps.db')
+    c = conn.cursor()
+    c.execute('INSERT INTO users(username, password, email, notifications_enabled) VALUES (?,?,?,?)', 
+              (username, make_hashes(password), email, 0))
+    conn.commit()
+    conn.close()
 
 def login_user(username, password):
-    if not MONGO_AVAILABLE: return False
-    user = users_col.find_one({"username": username})
-    if user: return check_hashes(password, user["password"])
+    conn = sqlite3.connect('daily_steps.db')
+    c = conn.cursor()
+    c.execute('SELECT password FROM users WHERE username = ?', (username,))
+    data = c.fetchone()
+    conn.close()
+    if data: return check_hashes(password, data[0])
     return False
 
-# --- Task Operations ---
-def add_task(task_id, username, task, time_str, priority, completed=False):
-    if not MONGO_AVAILABLE: return
-    tasks_col.insert_one({
-        "id": task_id, "username": username, "task": task, 
-        "time": time_str, "priority": priority, "completed": bool(completed)
-    })
+# --- SQLite Task Operations ---
+def add_task(task_id, username, task, time_str, priority, completed=0):
+    conn = sqlite3.connect('daily_steps.db')
+    c = conn.cursor()
+    c.execute('INSERT INTO tasks VALUES (?,?,?,?,?,?)', (task_id, username, task, time_str, priority, completed))
+    conn.commit()
+    conn.close()
 
 def get_tasks(username):
-    if not MONGO_AVAILABLE: return []
-    data = tasks_col.find({"username": username})
-    return [{"id": row["id"], "task": row["task"], "time": row["time"], "priority": row["priority"], "completed": row.get("completed", False)} for row in data]
+    conn = sqlite3.connect('daily_steps.db')
+    c = conn.cursor()
+    c.execute('SELECT id, task, time, priority, completed FROM tasks WHERE username = ?', (username,))
+    data = c.fetchall()
+    conn.close()
+    return [{"id": row[0], "task": row[1], "time": row[2], "priority": row[3], "completed": bool(row[4])} for row in data]
 
 def update_task_status(task_id, completed):
-    if not MONGO_AVAILABLE: return
-    tasks_col.update_one({"id": task_id}, {"$set": {"completed": bool(completed)}})
+    conn = sqlite3.connect('daily_steps.db')
+    c = conn.cursor()
+    c.execute('UPDATE tasks SET completed = ? WHERE id = ?', (int(completed), task_id))
+    conn.commit()
+    conn.close()
+
+def edit_task_details(task_id, new_task, new_time_str, new_priority):
+    conn = sqlite3.connect('daily_steps.db')
+    c = conn.cursor()
+    c.execute('UPDATE tasks SET task = ?, time = ?, priority = ? WHERE id = ?', 
+              (new_task, new_time_str, new_priority, task_id))
+    conn.commit()
+    conn.close()
 
 def delete_task(task_id):
-    if not MONGO_AVAILABLE: return
-    tasks_col.delete_one({"id": task_id})
+    conn = sqlite3.connect('daily_steps.db')
+    c = conn.cursor()
+    c.execute('DELETE FROM tasks WHERE id = ?', (task_id,))
+    conn.commit()
+    conn.close()
 
-# --- Other Operations ---
+# --- MongoDB Operations ---
 def log_focus_time_mongo(username, minutes):
     if not MONGO_AVAILABLE: 
         st.session_state.focus_time_logged = st.session_state.get('focus_time_logged', 0) + minutes
@@ -137,15 +171,15 @@ if not st.session_state.logged_in:
         new_email = st.text_input("Email Address")
         new_password = st.text_input("Password", type='password')
         if st.button("Sign Up"):
-            if MONGO_AVAILABLE:
-                existing_user = users_col.find_one({"username": new_user})
-                if existing_user:
-                    st.warning("Username already exists. Please choose another one.")
-                else:
-                    add_user(new_user, new_password, new_email)
-                    st.success("Account created successfully! Please proceed to Login.")
+            conn = sqlite3.connect('daily_steps.db')
+            c = conn.cursor()
+            c.execute('SELECT * FROM users WHERE username = ?', (new_user,))
+            if c.fetchone():
+                st.warning("Username already exists. Please choose another one.")
             else:
-                st.error("Cannot sign up: MongoDB is disconnected.")
+                add_user(new_user, new_password, new_email)
+                st.success("Account created successfully! Please proceed to Login.")
+            conn.close()
 
 
 # ==========================================
@@ -189,6 +223,10 @@ else:
         if 'end_time' not in st.session_state: st.session_state.end_time = None
         if 'timer_minutes' not in st.session_state: st.session_state.timer_minutes = 0
 
+        # Run Auto-Refresh ONLY if Timer is Active
+        if st.session_state.timer_active:
+            st_autorefresh(interval=1000, key="focus_timer_refresh")
+
         today_focus_time = get_today_focus_mongo(st.session_state.username)
 
         def get_time_window(start_time, duration_mins):
@@ -202,13 +240,15 @@ else:
             st.session_state.end_time = datetime.now() + timedelta(minutes=mins)
 
         def stop_timer():
+            # If they stop early, log the time they actually completed
             if st.session_state.timer_active and st.session_state.end_time:
                 elapsed = st.session_state.timer_minutes - (st.session_state.end_time - datetime.now()).total_seconds() / 60
-                if elapsed > 1:
+                if elapsed > 1: # Only log if they did at least 1 minute
                     log_focus_time_mongo(st.session_state.username, int(elapsed))
             st.session_state.timer_active = False
             st.session_state.end_time = None
 
+        # Modal for adding Custom Tasks
         @st.dialog("➕ Schedule Custom Task")
         def custom_task_modal():
             new_task_name = st.text_input("Task Description:")
@@ -225,6 +265,22 @@ else:
                     st.rerun()
                 else:
                     st.error("Please enter a description.")
+
+        # Modal for Editing Tasks
+        @st.dialog("✏️ Edit Task")
+        def edit_task_modal(task_id, current_name, current_priority):
+            new_task_name = st.text_input("New Description:", value=current_name)
+            col1, col2 = st.columns(2)
+            with col1: new_time = st.time_input("New Start Time:", value=datetime.now().time().replace(second=0, microsecond=0))
+            with col2: new_duration = st.number_input("Duration (Mins):", min_value=5, step=5, value=30)
+            new_priority = st.selectbox("Priority:", ["🔴 High", "🟡 Med", "🟢 Low"], index=["🔴 High", "🟡 Med", "🟢 Low"].index(current_priority))
+            
+            if st.button("Save Changes", use_container_width=True):
+                if new_task_name.strip():
+                    t_window = get_time_window(new_time, new_duration)
+                    edit_task_details(task_id, new_task_name, t_window, new_priority)
+                    st.toast("Task updated!", icon="✏️")
+                    st.rerun()
 
         PRESETS = {
             "📚 Study": [
@@ -262,17 +318,22 @@ else:
 
         left_col, right_col = st.columns([1, 2.5])
 
+        # NON-BLOCKING FOCUS TIMER
         with left_col:
             with st.container(border=True):
                 st.subheader("⏱️ Focus Timer")
+                
                 if not st.session_state.timer_active:
                     focus_minutes = st.number_input("Minutes", min_value=1, max_value=120, value=25)
                     if st.button("🚀 Start Timer", use_container_width=True):
                         start_timer(focus_minutes)
                         st.rerun()
                 else:
+                    # Calculate remaining time
                     remaining = st.session_state.end_time - datetime.now()
+                    
                     if remaining.total_seconds() <= 0:
+                        # Timer finished!
                         log_focus_time_mongo(st.session_state.username, st.session_state.timer_minutes)
                         st.session_state.timer_active = False
                         st.success("⏰ Time's up! Great focus session.")
@@ -280,9 +341,11 @@ else:
                         if st.button("Reset Timer", use_container_width=True):
                             st.rerun()
                     else:
+                        # Timer is still running
                         mins, secs = divmod(int(remaining.total_seconds()), 60)
                         st.markdown(f"<h1 style='text-align: center; color: #ff4b4b;'>{mins:02d}:{secs:02d}</h1>", unsafe_allow_html=True)
                         st.info("Timer is running in the background.")
+                        
                         c1, c2 = st.columns(2)
                         with c1: 
                             if st.button("🔄 Refresh", use_container_width=True): st.rerun()
@@ -291,8 +354,14 @@ else:
                                 stop_timer()
                                 st.rerun()
 
+        # BUILD ROUTINE & ACTION PLAN
         with right_col:
-            st.subheader("📋 Build Your Routine")
+            c_header, c_sort = st.columns([2, 1])
+            with c_header:
+                st.subheader("📋 Build Your Routine")
+            with c_sort:
+                sort_pref = st.selectbox("Sort By:", ["Time", "Priority"], label_visibility="collapsed")
+            
             c_btn1, c_btn2 = st.columns(2)
             with c_btn1:
                 if st.button("➕ Custom Task", use_container_width=True):
@@ -318,16 +387,24 @@ else:
             if not current_tasks:
                 st.info("Your schedule is empty! Use the menus above to plan your day.")
             else:
+                # Split into Pending and Completed Tabs
                 tab_pending, tab_completed = st.tabs(["⏳ Pending Tasks", "✅ Completed Tasks"])
                 
+                # RENDER PENDING TASKS
                 with tab_pending:
                     pending_tasks = [t for t in current_tasks if not t['completed']]
+                    
+                    # SMART SORTING
+                    if "Priority" in sort_pref:
+                        w = {"🔴 High": 1, "🟡 Med": 2, "🟢 Low": 3}
+                        pending_tasks = sorted(pending_tasks, key=lambda x: w.get(x['priority'], 4))
+
                     if not pending_tasks:
                         st.success("You are all caught up for today! 🎉")
                     else:
                         for task_dict in pending_tasks:
                             with st.container(border=True):
-                                col_chk, col_time, col_task, col_pri, col_del = st.columns([0.5, 1.5, 3, 1, 0.5])
+                                col_chk, col_time, col_task, col_pri, col_edit, col_del = st.columns([0.5, 1.5, 2.5, 1, 0.5, 0.5])
                                 with col_chk:
                                     is_checked = st.checkbox("", value=task_dict["completed"], key=f"chk_p_{task_dict['id']}")
                                     if is_checked:
@@ -337,11 +414,15 @@ else:
                                 with col_time: st.write(f"🕰️ **{task_dict['time']}**")
                                 with col_task: st.write(task_dict["task"])
                                 with col_pri: st.write(task_dict['priority'])
+                                with col_edit:
+                                    if st.button("✏️", key=f"edit_p_{task_dict['id']}", help="Edit Task"):
+                                        edit_task_modal(task_dict["id"], task_dict["task"], task_dict["priority"])
                                 with col_del:
                                     if st.button("✖", key=f"del_p_{task_dict['id']}", help="Delete"):
                                         delete_task(task_dict["id"])
                                         st.rerun()
 
+                # RENDER COMPLETED TASKS
                 with tab_completed:
                     done_tasks = [t for t in current_tasks if t['completed']]
                     if not done_tasks:
@@ -362,6 +443,7 @@ else:
                                     if st.button("✖", key=f"del_c_{task_dict['id']}", help="Delete"):
                                         delete_task(task_dict["id"])
                                         st.rerun()
+
 
     # --- PAGE 3: DISCIPLINE TIPS ---
     elif page == "Tips for Self-Discipline":
@@ -430,13 +512,14 @@ else:
         st.title("🔔 Automated Notification System")
         st.write("Manage your email alerts and push notifications for your daily routines.")
         
-        # Get user data from MongoDB
-        user_data = None
-        if MONGO_AVAILABLE:
-            user_data = users_col.find_one({"username": st.session_state.username})
-            
-        email = user_data.get("email", "") if user_data else ""
-        notifications_enabled = user_data.get("notifications_enabled", False) if user_data else False
+        # Get user data from SQLite
+        conn = sqlite3.connect('daily_steps.db')
+        c = conn.cursor()
+        c.execute('SELECT email, notifications_enabled FROM users WHERE username = ?', (st.session_state.username,))
+        user_data = c.fetchone()
+        
+        email = user_data[0]
+        notifications_enabled = bool(user_data[1])
         
         with st.container(border=True):
             st.subheader("Email Preferences")
@@ -444,14 +527,10 @@ else:
             enable_alerts = st.toggle("Enable Daily Summary & Alerts", value=notifications_enabled)
             
             if st.button("Update Settings"):
-                if MONGO_AVAILABLE:
-                    users_col.update_one(
-                        {"username": st.session_state.username}, 
-                        {"$set": {"email": new_email, "notifications_enabled": enable_alerts}}
-                    )
-                    st.success("Settings updated successfully!")
-                else:
-                    st.error("Cannot update settings: MongoDB is not connected.")
+                c.execute('UPDATE users SET email = ?, notifications_enabled = ? WHERE username = ?', 
+                          (new_email, int(enable_alerts), st.session_state.username))
+                conn.commit()
+                st.success("Settings updated successfully!")
                 
         st.divider()
         st.subheader("🛠️ System Test: Force Send Alert")
@@ -472,3 +551,4 @@ else:
                     else:
                         st.success(f"**Email Sent to {new_email}!**")
                         st.info("**Subject:** 🎉 You are all caught up!\n\n**Body:**\nGreat job! You have no pending tasks for today.")
+        conn.close()
