@@ -145,6 +145,22 @@ def add_xp(username, xp_amount):
     )
     return new_level > profile["level"] 
 
+def remove_xp(username, xp_amount):
+    if not MONGO_AVAILABLE: return
+    profile = get_gamification(username)
+    
+    # Calculate new XP, ensuring it never drops below 0 total XP
+    new_xp = max(0, profile["xp"] - xp_amount)
+    
+    # Recalculate level downward using your linear threshold formula
+    new_level = (new_xp // 100) + 1
+    
+    # Save the updated profile back to MongoDB
+    gamification_col.update_one(
+        {"username": username},
+        {"$set": {"xp": new_xp, "level": new_level}}
+    )
+    
 def update_streak_on_checkout(username):
     if not MONGO_AVAILABLE: return
     profile = get_gamification(username)
