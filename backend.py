@@ -362,7 +362,11 @@ def render_sidebar():
             st.markdown(f"## 👤 {st.session_state.username}")
             st.markdown(f"### {rank_title}")
             st.markdown(f"**Level {user_stats['level']}** | 🔥 **{user_stats['streak']} Day Streak**")
-            st.progress(progress_to_next / 100.0, text=f"XP: {user_stats['xp']} / 500")
+            current_xp = user_stats['xp']
+            next_level_cap = user_stats['level'] * 100 
+            progress_fraction = (current_xp % 100) / 100.0
+            
+            st.progress(progress_fraction, text=f"XP: {current_xp} / {next_level_cap}")
             st.write("")
             
         # 2. Logout Button (Stays at the very bottom)
