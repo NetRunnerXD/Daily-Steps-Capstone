@@ -104,10 +104,10 @@ if not st.session_state.logged_in:
             }
             /* MOBILE RESPONSIVENESS PATCH */
             @media (max-width: 768px) {
-                /* Fix the zoomed-in background glitch on phones */
                 .stApp {
+                    background-image: url("https://images.unsplash.com/photo-1645363308298-3a949c8bfd86?q=80&w=1080&auto=format&fit=crop") !important;
                     background-attachment: scroll !important; 
-                    background-position: center top !important;
+                    background-position: center center !important;
                 }
                 
                 /* Shrink the glass card layout to fit small screens perfectly */
