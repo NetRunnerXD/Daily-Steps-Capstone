@@ -160,7 +160,7 @@ def remove_xp(username, xp_amount):
         {"username": username},
         {"$set": {"xp": new_xp, "level": new_level}}
     )
-    
+
 def update_streak_on_checkout(username):
     if not MONGO_AVAILABLE: return
     profile = get_gamification(username)
@@ -260,4 +260,4 @@ def render_sidebar():
         # 2. Logout Button (Stays at the very bottom)
         if st.sidebar.button("🚪 Logout", use_container_width=True):
             st.session_state.clear()
-            st.switch_page("0_🏠_Home.py")
+            st.switch_page("0_Home.py")
