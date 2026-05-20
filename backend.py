@@ -263,28 +263,42 @@ def render_sidebar():
                 backdrop-filter: blur(10px) !important;
             }
             
-            /* 4. Sleek Interactive Buttons */
-            .stButton > button {
+            /* 4. Sleek Interactive Standard Buttons */
+            .stButton > button[kind="secondary"] {
                 background: rgba(255, 255, 255, 0.03) !important;
                 border: 1px solid rgba(255, 255, 255, 0.1) !important;
-                color: #ffffff !important;
                 border-radius: 8px !important;
                 transition: all 0.3s ease !important;
             }
-            .stButton > button:hover {
+            .stButton > button[kind="secondary"]:hover {
                 background: rgba(255, 255, 255, 0.08) !important;
-                border: 1px solid rgba(255, 255, 255, 0.25) !important;
-                box-shadow: 0 0 15px rgba(255, 255, 255, 0.05) !important;
+                border: 1px solid rgba(16, 185, 129, 0.4) !important; /* Mint glow on hover */
+                box-shadow: 0 0 15px rgba(16, 185, 129, 0.15) !important;
                 transform: translateY(-1px) !important;
             }
 
-            /* 5. Primary Action Buttons (Cyber Mint) */
+            /* 🟢 5. FIXED: Primary Action Buttons (Cyber Mint) */
             .stButton > button[kind="primary"] {
                 background: linear-gradient(135deg, #10B981 0%, #059669 100%) !important;
+                background-color: transparent !important; /* Overrides the config.toml flat color */
                 border: none !important;
-                box-shadow: 0 4px 15px rgba(16, 185, 129, 0.25) !important;
+                border-radius: 8px !important;
+                box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3) !important;
+                transition: all 0.3s ease !important;
+            }
+            .stButton > button[kind="primary"]:hover {
+                box-shadow: 0 6px 20px rgba(16, 185, 129, 0.5) !important;
+                transform: translateY(-2px) !important;
             }
 
+            .stButton > button p, 
+            .stButton > button div, 
+            .stButton > button span {
+                color: #ffffff !important;
+                font-weight: 600 !important;
+                text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3) !important;
+            }
+                    
             /* 6. Emerald to Teal Progress Bar */
             .stProgress > div > div > div > div {
                 background-image: linear-gradient(to right, #10B981 0%, #14B8A6 100%) !important;
