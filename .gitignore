@@ -1,0 +1,9 @@
+# Ignore local Streamlit secrets containing DB credentials
+.streamlit/secrets.toml
+
+# Ignore local SQLite database file to avoid losing data on cloud rebuilds
+*.db
+
+# Ignore typical Python cache files
+__pycache__/
+*.pyc
