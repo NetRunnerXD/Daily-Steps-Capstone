@@ -238,16 +238,124 @@ def render_sidebar():
         rank_title = get_rank_title(user_stats['level'])
         progress_to_next = (user_stats['xp'] % 100)
 
-        st.sidebar.markdown("""
-            <style>
-                [data-testid="stSidebarNav"] {
-                    order: 2 !important;
-                }
-                [data-testid="stVerticalBlock"] > div:has(div.nav-wrapper) {
-                    order: 1 !important;
-                }
-            </style>
-        """, unsafe_allow_html=True)
+        st.markdown("""
+        <style>
+            /* 1. Deep Graphite Radial Background */
+            .stApp {
+                background-color: #050505 !important;
+                background-image: radial-gradient(circle at 50% 0%, #171717 0%, #050505 70%) !important;
+            }
+            
+            /* 2. Frosted Sidebar */
+            [data-testid="stSidebar"] {
+                background-color: rgba(5, 5, 5, 0.7) !important;
+                backdrop-filter: blur(18px) !important;
+                -webkit-backdrop-filter: blur(18px) !important;
+                border-right: 1px solid rgba(255, 255, 255, 0.04) !important;
+            }
+
+            /* 3. Premium Glass Cards */
+            [data-testid="stVerticalBlockBorderWrapper"] {
+                background: linear-gradient(145deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0.01) 100%) !important;
+                border: 1px solid rgba(255, 255, 255, 0.05) !important;
+                border-radius: 16px !important;
+                box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.8) !important;
+                backdrop-filter: blur(10px) !important;
+            }
+            
+            /* 4. Sleek Interactive Buttons */
+            .stButton > button {
+                background: rgba(255, 255, 255, 0.03) !important;
+                border: 1px solid rgba(255, 255, 255, 0.1) !important;
+                color: #ffffff !important;
+                border-radius: 8px !important;
+                transition: all 0.3s ease !important;
+            }
+            .stButton > button:hover {
+                background: rgba(255, 255, 255, 0.08) !important;
+                border: 1px solid rgba(255, 255, 255, 0.25) !important;
+                box-shadow: 0 0 15px rgba(255, 255, 255, 0.05) !important;
+                transform: translateY(-1px) !important;
+            }
+
+            /* 5. Primary Action Buttons (Cyber Mint) */
+            .stButton > button[kind="primary"] {
+                background: linear-gradient(135deg, #10B981 0%, #059669 100%) !important;
+                border: none !important;
+                box-shadow: 0 4px 15px rgba(16, 185, 129, 0.25) !important;
+            }
+
+            /* 6. Emerald to Teal Progress Bar */
+            .stProgress > div > div > div > div {
+                background-image: linear-gradient(to right, #10B981 0%, #14B8A6 100%) !important;
+                border-radius: 10px !important;
+            }
+            
+            /* 7. Refined Typography */
+            h1, h2, h3, h4, h5, h6, span, label, div {
+                color: #e2e8f0 !important; 
+            }
+            h1, h2 {
+                color: #ffffff !important; 
+                letter-spacing: -0.5px !important; 
+            }
+            p {
+                color: #94a3b8 !important; 
+            }
+            
+            /* 🟢 Custom Glowing Scrollbars (Mint) */
+            ::-webkit-scrollbar {
+                width: 8px;
+                height: 8px;
+            }
+            ::-webkit-scrollbar-track {
+                background: rgba(0, 0, 0, 0.3);
+            }
+            ::-webkit-scrollbar-thumb {
+                background: #10B981;
+                border-radius: 4px;
+            }
+            ::-webkit-scrollbar-thumb:hover {
+                background: #059669;
+            }
+
+            /* 🟢 Global Frosted Input Fields */
+            .stTextInput input, .stTextArea textarea, .stSelectbox > div > div {
+                background-color: rgba(255, 255, 255, 0.05) !important;
+                color: #ffffff !important;
+                border: 1px solid rgba(255, 255, 255, 0.1) !important;
+                border-radius: 8px !important;
+                transition: all 0.3s ease !important;
+            }
+            .stTextInput input:focus, .stTextArea textarea:focus {
+                border-color: #10B981 !important;
+                box-shadow: 0 0 10px rgba(16, 185, 129, 0.3) !important;
+                background-color: rgba(0, 0, 0, 0.5) !important;
+            }
+            
+            /* 🟢 Premium Pill-Shaped Navigation Tabs */
+            .stTabs [data-baseweb="tab-list"] {
+                background-color: rgba(0, 0, 0, 0.4) !important;
+                border-radius: 12px !important;
+                padding: 4px !important;
+                gap: 4px;
+            }
+            .stTabs [data-baseweb="tab"] {
+                background-color: transparent !important;
+                color: #94a3b8 !important;
+                border-radius: 8px !important;
+                padding-top: 8px !important;
+                padding-bottom: 8px !important;
+                border: none !important;
+            }
+            .stTabs [aria-selected="true"] {
+                background: linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(20, 184, 166, 0.2)) !important;
+                color: #ffffff !important;
+                border: 1px solid rgba(16, 185, 129, 0.4) !important;
+                box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3) !important;
+            }
+        </style>
+    """, unsafe_allow_html=True)
         
         # 1. Profile and Level System Container
         with st.sidebar.container():

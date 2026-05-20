@@ -1,0 +1,7 @@
+[theme]
+base = "dark"
+primaryColor = "#10B981"          # Cyber Mint accent for chart lines/bars
+backgroundColor = "#050505"       # Deep Graphite matching your main background
+secondaryBackgroundColor = "#171717" # Lighter graphite for graph tooltips/menus
+textColor = "#e2e8f0"             # Crisp off-white text
+font = "sans serif"
