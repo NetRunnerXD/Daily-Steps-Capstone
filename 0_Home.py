@@ -105,7 +105,7 @@ if not st.session_state.logged_in:
             /* MOBILE RESPONSIVENESS PATCH */
             @media (max-width: 768px) {
                 .stApp {
-                    background-image: url("https://images.unsplash.com/photo-1645363308298-3a949c8bfd86?q=80&w=1080&auto=format&fit=crop") !important;
+                    background-image: url("https://images.unsplash.com/photo-1651739083989-b470abadb966?q=80&w=1080&auto=format&fit=crop") !important;
                     background-attachment: scroll !important; 
                     background-position: center center !important;
                 }
