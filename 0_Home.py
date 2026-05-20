@@ -102,6 +102,30 @@ if not st.session_state.logged_in:
                 color: #ffffff !important;
                 text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.4) !important;
             }
+            /* MOBILE RESPONSIVENESS PATCH */
+            @media (max-width: 768px) {
+                /* Fix the zoomed-in background glitch on phones */
+                .stApp {
+                    background-attachment: scroll !important; 
+                    background-position: center top !important;
+                }
+                
+                /* Shrink the glass card layout to fit small screens perfectly */
+                .block-container {
+                    max-width: 92% !important; /* Take up most of the phone screen width */
+                    margin-top: 6vh !important; /* Push it slightly higher up */
+                    padding: 24px !important; /* Reduce padding so input boxes have room to breathe */
+                    border-radius: 18px !important;
+                }
+                
+                /* Ensure tabs don't overflow */
+                .stTabs [data-baseweb="tab-list"] {
+                    gap: 0px;
+                }
+                .stTabs [data-baseweb="tab"] {
+                    font-size: 14px !important;
+                }
+            }
         </style>
     """, unsafe_allow_html=True)
     
