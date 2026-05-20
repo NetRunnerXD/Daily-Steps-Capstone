@@ -228,25 +228,37 @@ with right_col:
                                 st.rerun()
 
         with tab_completed:
-            done_tasks = [t for t in current_tasks if t['completed']]
-            if not done_tasks:
-                st.info("No tasks completed yet. Let's get to work! 💪")
-            else:
-                for task_dict in done_tasks:
-                    with st.container(border=True):
-                        col_chk, col_time, col_task, col_pri, col_del = st.columns([0.5, 1.5, 3, 1, 0.5])
-                        with col_chk:
-                            is_checked = st.checkbox("", value=task_dict["completed"], key=f"chk_c_{task_dict['id']}")
-                            if not is_checked:
-                                update_task_status(task_dict["id"], False)
-                                st.rerun()
-                        with col_time: st.write(f"🕰️ **{task_dict['time']}**")
-                        with col_task: st.markdown(f"<span style='text-decoration: line-through; color: #888;'>{task_dict['task']}</span>", unsafe_allow_html=True)
-                        with col_pri: st.write(task_dict['priority'])
-                        with col_del:
-                            if st.button("✖", key=f"del_c_{task_dict['id']}", help="Delete"):
-                                delete_task(task_dict["id"])
-                                st.rerun()
+                    done_tasks = [t for t in current_tasks if t['completed']]
+                    if not done_tasks:
+                        st.info("No tasks completed yet. Let's get to work! 💪")
+                    else:
+                        for task_dict in done_tasks:
+                            with st.container(border=True):
+                                col_chk, col_time, col_task, col_pri, col_del = st.columns([0.5, 1.5, 3, 1, 0.5])
+                                with col_chk:
+                                    is_checked = st.checkbox("", value=task_dict["completed"], key=f"chk_c_{task_dict['id']}")
+                                    
+                                    if not is_checked:
+                                        # 1. Revert task status in SQLite
+                                        update_task_status(task_dict["id"], False)
+                                        
+                                        # 2. Determine how much XP to deduct based on priority
+                                        xp_deduction = {"🔴 High": 20, "🟡 Med": 10, "🟢 Low": 5}.get(task_dict['priority'], 10)
+                                        
+                                        # 3. Call our new deduction function (We will add this to backend.py next)
+                                        remove_xp(st.session_state.username, xp_deduction)
+                                        
+                                        st.toast(f"Task reverted! (-{xp_deduction} XP)", icon="🔄")
+                                        time.sleep(0.5)
+                                        st.rerun()
+                                        
+                                with col_time: st.write(f"🕰️ **{task_dict['time']}**")
+                                with col_task: st.markdown(f"<span style='text-decoration: line-through; color: #888;'>{task_dict['task']}</span>", unsafe_allow_html=True)
+                                with col_pri: st.write(task_dict['priority'])
+                                with col_del:
+                                    if st.button("✖", key=f"del_c_{task_dict['id']}", help="Delete"):
+                                        delete_task(task_dict["id"])
+                                        st.rerun()
             
         st.divider()
         st.markdown("### 🌙 End of Day Checkout")
